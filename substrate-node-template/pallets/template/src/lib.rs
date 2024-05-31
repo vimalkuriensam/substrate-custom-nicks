@@ -14,7 +14,8 @@ pub mod pallet {
 		pallet_prelude::{OptionQuery, *},
 		Blake2_128Concat,
 	};
-	use frame_system::pallet_prelude::*;
+	use frame_system::{ensure_signed, pallet_prelude::*};
+	use scale_info::{prelude::vec::Vec, TypeInfo};
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -42,12 +43,33 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		SomethingStored {},
+		UserInfoAdded(T::AccountId),
 	}
 
 	#[pallet::error]
-	pub enum Error<T> {}
+	pub enum Error<T> {
+		TooLong,
+	}
 
 	#[pallet::call]
-	impl<T: Config> Pallet<T> {}
+	impl<T: Config> Pallet<T> {
+		#[pallet::call_index(0)]
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
+		pub fn insert_user_info(
+			origin: OriginFor<T>,
+			name: Vec<u8>,
+			age: u8,
+			title: Vec<u8>,
+		) -> DispatchResult {
+			let sender = ensure_signed(origin)?;
+			let bounded_name =
+				BoundedVec::<u8, T::MaxLength>::try_from(name).map_err(|_| Error::<T>::TooLong)?;
+			let bounded_title =
+				BoundedVec::<u8, T::MaxLength>::try_from(title).map_err(|_| Error::<T>::TooLong)?;
+			let user = User { name: bounded_name, age, title: bounded_title };
+			<AccountToUserInfo<T>>::insert(&sender, user);
+			Self::deposit_event(Event::<T>::UserInfoAdded(sender));
+			Ok(())
+		}
+	}
 }

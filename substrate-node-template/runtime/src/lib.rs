@@ -249,7 +249,7 @@ impl pallet_sudo::Config for Runtime {
 impl pallet_template::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type WeightInfo = pallet_template::weights::SubstrateWeight<Runtime>;
-	type MaxLength = Const<50>;
+	type MaxLength = ConstU32<50>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
