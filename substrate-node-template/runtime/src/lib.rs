@@ -250,6 +250,8 @@ impl pallet_template::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type WeightInfo = pallet_template::weights::SubstrateWeight<Runtime>;
 	type MaxLength = ConstU32<50>;
+	type Currency = Balances;
+	type DepositValue = ConstU128<100>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.

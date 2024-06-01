@@ -12,10 +12,14 @@ pub mod pallet {
 	use super::*;
 	use frame_support::{
 		pallet_prelude::{OptionQuery, *},
+		traits::{Currency, ReservableCurrency},
 		Blake2_128Concat,
 	};
 	use frame_system::{ensure_signed, pallet_prelude::*};
 	use scale_info::{prelude::vec::Vec, TypeInfo};
+
+	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
+	type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -24,8 +28,11 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		type WeightInfo: WeightInfo;
+		type Currency: ReservableCurrency<Self::AccountId>;
 		#[pallet::constant]
 		type MaxLength: Get<u32>;
+		#[pallet::constant]
+		type DepositValue: Get<BalanceOf<Self>>;
 	}
 
 	#[derive(Debug, Encode, Decode, Default, MaxEncodedLen, TypeInfo)]
@@ -38,12 +45,14 @@ pub mod pallet {
 
 	#[pallet::storage]
 	pub type AccountToUserInfo<T: Config> =
-		StorageMap<_, Blake2_128Concat, T::AccountId, User<T>, OptionQuery>;
+		StorageMap<_, Blake2_128Concat, T::AccountId, (User<T>, BalanceOf<T>), OptionQuery>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
+		UserInfoUpdated(T::AccountId),
 		UserInfoAdded(T::AccountId),
+		ValueReserved(T::AccountId, BalanceOf<T>),
 	}
 
 	#[pallet::error]
@@ -67,7 +76,16 @@ pub mod pallet {
 			let bounded_title =
 				BoundedVec::<u8, T::MaxLength>::try_from(title).map_err(|_| Error::<T>::TooLong)?;
 			let user = User { name: bounded_name, age, title: bounded_title };
-			<AccountToUserInfo<T>>::insert(&sender, user);
+			let deposit = if let Some((_, deposit)) = <AccountToUserInfo<T>>::get(&sender) {
+				Self::deposit_event(Event::<T>::UserInfoUpdated(sender.clone()));
+				deposit
+			} else {
+				let deposit = T::DepositValue::get();
+				T::Currency::reserve(&sender, deposit)?;
+				Self::deposit_event(Event::<T>::ValueReserved(sender.clone(), deposit));
+				deposit
+			};
+			<AccountToUserInfo<T>>::insert(&sender, (user, deposit));
 			Self::deposit_event(Event::<T>::UserInfoAdded(sender));
 			Ok(())
 		}
