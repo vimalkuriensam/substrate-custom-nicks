@@ -17,9 +17,11 @@ pub mod pallet {
 	};
 	use frame_system::{ensure_signed, pallet_prelude::*};
 	use scale_info::{prelude::vec::Vec, TypeInfo};
+	use sp_runtime::traits::StaticLookup;
 
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 	type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
+	type AddressLookup<T> = <<T as frame_system::Config>::Lookup as StaticLookup>::Source;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -29,6 +31,7 @@ pub mod pallet {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		type WeightInfo: WeightInfo;
 		type Currency: ReservableCurrency<Self::AccountId>;
+		type ForceOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 		#[pallet::constant]
 		type MaxLength: Get<u32>;
 		#[pallet::constant]
@@ -104,6 +107,14 @@ pub mod pallet {
 			Self::deposit_event(Event::<T>::ValueUnreserved(sender.clone(), deposit));
 			<AccountToUserInfo<T>>::remove(&sender);
 			Self::deposit_event(Event::<T>::UserInfoDeleted(sender));
+			Ok(())
+		}
+
+		#[pallet::call_index(2)]
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
+		pub fn kill_user_info(origin: OriginFor<T>, recipient: AddressLookup<T>) -> DispatchResult{
+			let _root_user = T::ForceOrigin::ensure_origin(origin);
+			let target = T::Lookup::lookup(recipient)?;
 			Ok(())
 		}
 	}
