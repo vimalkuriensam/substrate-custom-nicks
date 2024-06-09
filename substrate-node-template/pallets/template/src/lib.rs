@@ -12,7 +12,7 @@ pub mod pallet {
 	use super::*;
 	use frame_support::{
 		pallet_prelude::{OptionQuery, *},
-		traits::{Currency, ReservableCurrency},
+		traits::{Currency, OnUnbalanced, ReservableCurrency},
 		Blake2_128Concat,
 	};
 	use frame_system::{ensure_signed, pallet_prelude::*};
@@ -22,6 +22,7 @@ pub mod pallet {
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 	type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
 	type AddressLookup<T> = <<T as frame_system::Config>::Lookup as StaticLookup>::Source;
+	type NegetiveImbalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::NegativeImbalance;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -32,6 +33,7 @@ pub mod pallet {
 		type WeightInfo: WeightInfo;
 		type Currency: ReservableCurrency<Self::AccountId>;
 		type ForceOrigin: EnsureOrigin<Self::RuntimeOrigin>;
+		type Slashed: OnUnbalanced<NegetiveImbalanceOf<Self>>;
 		#[pallet::constant]
 		type MaxLength: Get<u32>;
 		#[pallet::constant]
@@ -59,6 +61,7 @@ pub mod pallet {
 		UserInfoDeleted(T::AccountId),
 		ValueReserved(T::AccountId, BalanceOf<T>),
 		ValueUnreserved(T::AccountId, BalanceOf<T>),
+		SlashedBalance(T::AccountId, BalanceOf<T>),
 	}
 
 	#[pallet::error]
@@ -112,9 +115,16 @@ pub mod pallet {
 
 		#[pallet::call_index(2)]
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
-		pub fn kill_user_info(origin: OriginFor<T>, recipient: AddressLookup<T>) -> DispatchResult{
-			let _root_user = T::ForceOrigin::ensure_origin(origin);
+		pub fn kill_user_info(origin: OriginFor<T>, recipient: AddressLookup<T>) -> DispatchResult {
+			T::ForceOrigin::ensure_origin(origin)?;
 			let target = T::Lookup::lookup(recipient)?;
+			let (_, deposit) =
+				<AccountToUserInfo<T>>::get(&target).ok_or(Error::<T>::UserNotAdded)?;
+			let (negetive_imbalance, total_balance) = T::Currency::slash_reserved(&target, deposit);
+			Self::deposit_event(Event::<T>::SlashedBalance(target.clone(), total_balance));
+			T::Slashed::on_unbalanced(negetive_imbalance);
+			<AccountToUserInfo<T>>::remove(&target);
+			Self::deposit_event(Event::<T>::UserInfoDeleted(target));
 			Ok(())
 		}
 	}

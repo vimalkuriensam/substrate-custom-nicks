@@ -252,6 +252,7 @@ impl pallet_template::Config for Runtime {
 	type MaxLength = ConstU32<50>;
 	type Currency = Balances;
 	type DepositValue = ConstU128<100>;
+	type ForceOrigin = EnsureRoot<AccountId>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
