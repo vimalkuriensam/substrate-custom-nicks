@@ -44,6 +44,7 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
+	#[pallet::getter(fn get_user_info)]
 	pub type AccountToUserInfo<T: Config> =
 		StorageMap<_, Blake2_128Concat, T::AccountId, (User<T>, BalanceOf<T>), OptionQuery>;
 
@@ -52,12 +53,15 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		UserInfoUpdated(T::AccountId),
 		UserInfoAdded(T::AccountId),
+		UserInfoDeleted(T::AccountId),
 		ValueReserved(T::AccountId, BalanceOf<T>),
+		ValueUnreserved(T::AccountId, BalanceOf<T>),
 	}
 
 	#[pallet::error]
 	pub enum Error<T> {
 		TooLong,
+		UserNotAdded,
 	}
 
 	#[pallet::call]
@@ -87,6 +91,19 @@ pub mod pallet {
 			};
 			<AccountToUserInfo<T>>::insert(&sender, (user, deposit));
 			Self::deposit_event(Event::<T>::UserInfoAdded(sender));
+			Ok(())
+		}
+
+		#[pallet::call_index(1)]
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
+		pub fn clear_user_info(origin: OriginFor<T>) -> DispatchResult {
+			let sender = ensure_signed(origin)?;
+			let (_, deposit) =
+				<AccountToUserInfo<T>>::get(&sender).ok_or(Error::<T>::UserNotAdded)?;
+			T::Currency::unreserve(&sender, deposit);
+			Self::deposit_event(Event::<T>::ValueUnreserved(sender.clone(), deposit));
+			<AccountToUserInfo<T>>::remove(&sender);
+			Self::deposit_event(Event::<T>::UserInfoDeleted(sender));
 			Ok(())
 		}
 	}
