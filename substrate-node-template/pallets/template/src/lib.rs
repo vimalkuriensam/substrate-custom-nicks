@@ -17,12 +17,13 @@ pub mod pallet {
 	};
 	use frame_system::{ensure_signed, pallet_prelude::*};
 	use scale_info::{prelude::vec::Vec, TypeInfo};
-	use sp_runtime::traits::StaticLookup;
+	use sp_runtime::traits::{StaticLookup, Zero};
 
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 	type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
 	type AddressLookup<T> = <<T as frame_system::Config>::Lookup as StaticLookup>::Source;
-	type NegetiveImbalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::NegativeImbalance;
+	type NegetiveImbalanceOf<T> =
+		<<T as Config>::Currency as Currency<AccountIdOf<T>>>::NegativeImbalance;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -125,6 +126,30 @@ pub mod pallet {
 			T::Slashed::on_unbalanced(negetive_imbalance);
 			<AccountToUserInfo<T>>::remove(&target);
 			Self::deposit_event(Event::<T>::UserInfoDeleted(target));
+			Ok(())
+		}
+
+		#[pallet::call_index(3)]
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
+		pub fn force_user_info(
+			origin: OriginFor<T>,
+			recipient: AddressLookup<T>,
+			name: Vec<u8>,
+			age: u8,
+			title: Vec<u8>,
+		) -> DispatchResult {
+			T::ForceOrigin::ensure_origin(origin)?;
+			let bounded_name =
+				BoundedVec::<u8, T::MaxLength>::try_from(name).map_err(|_| Error::<T>::TooLong)?;
+			let bounded_title =
+				BoundedVec::<u8, T::MaxLength>::try_from(title).map_err(|_| Error::<T>::TooLong)?;
+			let target = T::Lookup::lookup(recipient)?;
+			let user = User { name: bounded_name, age, title: bounded_title };
+			let deposit = match <AccountToUserInfo<T>>::get(&target) {
+				Some((_, deposit)) => deposit,
+				None => Zero::zero(),
+			};
+			<AccountToUserInfo<T>>::insert(&target, (user, deposit));
 			Ok(())
 		}
 	}
